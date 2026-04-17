@@ -28,5 +28,5 @@
     "command_hand":"Left",
     "brush_hand":"Right",
     "fpsfilter":0.95,
-    "coloured_background":false
+    "coloured_background":true
 }
