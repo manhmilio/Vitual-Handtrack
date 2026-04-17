@@ -95,7 +95,7 @@ def preprocess(frame,statusState,fps):
     # UI constants
     top_h = 60
     bottom_h = 60
-    left_w = 80
+    side_w = 80
     w = settings['window_width']
     h = settings['window_height']
 
@@ -105,16 +105,16 @@ def preprocess(frame,statusState,fps):
     border_color = (60, 60, 60)
     ui_alpha = 0.55
 
-    # Panels: top palette, left brush size, bottom status bar
+    # Panels: top palette, right brush size, bottom status bar
     cv2.rectangle(ui, (0, 0), (w, top_h), panel_color, -1, lineType=cv2.LINE_AA)
-    cv2.rectangle(ui, (0, top_h), (left_w, h - bottom_h), panel_color, -1, lineType=cv2.LINE_AA)
+    cv2.rectangle(ui, (w - side_w, top_h), (w, h - bottom_h), panel_color, -1, lineType=cv2.LINE_AA)
     cv2.rectangle(ui, (0, h - bottom_h), (w, h), panel_color, -1, lineType=cv2.LINE_AA)
 
     frame = cv2.addWeighted(frame, 1.0, ui, ui_alpha, 0)
 
     # Borders
     cv2.line(frame, (0, top_h), (w, top_h), border_color, 2, lineType=cv2.LINE_AA)
-    cv2.line(frame, (left_w, top_h), (left_w, h - bottom_h), border_color, 1, lineType=cv2.LINE_AA)
+    cv2.line(frame, (w - side_w, top_h), (w - side_w, h - bottom_h), border_color, 1, lineType=cv2.LINE_AA)
     cv2.line(frame, (0, h - bottom_h), (w, h - bottom_h), border_color, 1, lineType=cv2.LINE_AA)
 
     def draw_text(text, org, scale=1.0, color=(255, 255, 255), thickness=2):
@@ -138,10 +138,10 @@ def preprocess(frame,statusState,fps):
         thickness = 3 if is_selected else 1
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 255), thickness, lineType=cv2.LINE_AA)
 
-    # Left brush size selector (6 levels)
+    # Right brush size selector (6 levels)
     size_levels = settings['brush_size']
     slot_h = max(1, (h - top_h - bottom_h) // len(size_levels))
-    cx = left_w // 2
+    cx = w - side_w // 2
     for idx, sz in enumerate(size_levels):
         cy = top_h + slot_h // 2 + idx * slot_h
         is_selected = (sz == brush_size)
@@ -210,7 +210,7 @@ def mouseclick(event,xpos,ypos,*args,**kwargs):
                 color='white'
             else:
                 color='black'
-        if xpos>0 and xpos<60 and ypos>60 and ypos<settings['window_height']-60:
+        if xpos>settings['window_width']-60 and xpos<settings['window_width'] and ypos>60 and ypos<settings['window_height']-60:
             diff=(settings['window_height']-120)//6
             if ypos>60 and ypos<60+diff:
                 brush_size=5
@@ -297,7 +297,7 @@ while run:
                 else:
                     color='black'
             #! brush size logic
-            if handlandmarks[idx][8][0]>0 and handlandmarks[idx][8][0]<60 and handlandmarks[idx][8][1]>60 and handlandmarks[idx][8][1]<settings['window_height']-60:
+            if handlandmarks[idx][8][0]>settings['window_width']-60 and handlandmarks[idx][8][0]<settings['window_width'] and handlandmarks[idx][8][1]>60 and handlandmarks[idx][8][1]<settings['window_height']-60:
                 diff=(settings['window_height']-120)//6
                 if handlandmarks[idx][8][1]>60 and handlandmarks[idx][8][1]<60+diff:
                     brush_size=5
