@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import os
-from handTracker import findDistances,findError,MediapipeHands
+from handTracker import findDistances,findError,MediapipeHands,detectCustomGesture
 import json
 import pickle
 import time
@@ -12,6 +12,7 @@ settings=json.load(f)
 del f
 
 drawState='Standby'
+statusState='Standby'
 color='white'
 brush_size=20
 
@@ -90,7 +91,7 @@ def clearcanvas():
     global prevcanvas
     prevcanvas=np.zeros([settings['window_height'],settings['window_width'],3],dtype=np.uint8)
 
-def preprocess(frame,drawState,fps):
+def preprocess(frame,statusState,fps):
     # UI constants
     top_h = 60
     bottom_h = 60
@@ -150,7 +151,7 @@ def preprocess(frame,drawState,fps):
         cv2.circle(frame, (cx, cy), sz + 2, ring_color, ring_thickness, lineType=cv2.LINE_AA)
 
     # Bottom status + quick actions
-    draw_text(f'{drawState}', (20, h - 20), scale=1.0)
+    draw_text(f'{statusState}', (20, h - 20), scale=1.0)
 
     # Current color preview (with label if eraser)
     preview_x1 = w // 7
@@ -248,6 +249,7 @@ while run:
     if settings['coloured_background']==False:
         frame=convert_toBNW(frame)
     canvas=prevcanvas
+    statusState='Standby'
     handlandmarks,handstype=findhands.handsdata(frame)
     for idx,handtype in enumerate(handstype):
         if handtype==settings['command_hand']:
@@ -257,10 +259,18 @@ while run:
                 drawState=gesturenames[idx2]
             else:
                 drawState='Standby'
+
+            customGesture=detectCustomGesture(handlandmarks[idx])
+            if customGesture is None:
+                statusState=drawState
+            else:
+                statusState=customGesture
+
             frame=findhands.drawLandmarks(frame, [handlandmarks[idx]],False)
             break
     if settings['command_hand'] not in handstype:
         drawState='Standby'
+        statusState='Standby'
     for idx,handtype in enumerate(handstype):
         if handtype==settings['brush_hand']:
             cv2.circle(frame,(handlandmarks[idx][8][0],handlandmarks[idx][8][1]),brush_size,settings['color_swatches'][color],-1)
@@ -305,7 +315,7 @@ while run:
             if drawState=='Draw':
                 cv2.circle(canvas,(handlandmarks[idx][8][0],handlandmarks[idx][8][1]),brush_size,settings['color_swatches'][color],-1)
     frame=cv2.addWeighted(frame,.6,canvas,1,1)
-    frame=preprocess(frame, drawState,fps)
+    frame=preprocess(frame, statusState,fps)
     prevcanvas=canvas
     if time.time()-savetime<=1:
         cv2.putText(frame,f'Image saved succesfully',(settings['window_width']//2-380,settings['window_height']//2),cv2.FONT_HERSHEY_SIMPLEX,2,(10,250,10),2)

@@ -104,3 +104,36 @@ def findError(knowngestures,unknownMatrix,keypoints):
             error=currenterror
             idx=i
     return error,idx
+
+def detectCustomGesture(handData):
+    """Detect a few explicit finger gestures from one hand landmarks list.
+
+    Returns one of: 'Peace', 'TwoFingerHeart', 'MiddleFinger', or None.
+    """
+    if handData is None or len(handData) < 21:
+        return None
+
+    def is_up(tip_idx, pip_idx):
+        return handData[tip_idx][1] < handData[pip_idx][1]
+
+    index_up = is_up(8, 6)
+    middle_up = is_up(12, 10)
+    ring_up = is_up(16, 14)
+    pinky_up = is_up(20, 18)
+
+    # Middle finger: only middle finger extended (thumb ignored).
+    if middle_up and (not index_up) and (not ring_up) and (not pinky_up):
+        return 'MiddleFinger'
+
+    # Peace / Two-finger heart: index + middle up, ring + pinky folded.
+    if index_up and middle_up and (not ring_up) and (not pinky_up):
+        palm_size = ((handData[0][0] - handData[9][0]) ** 2 + (handData[0][1] - handData[9][1]) ** 2) ** 0.5
+        if palm_size < 1e-6:
+            return 'Peace'
+
+        tip_distance = ((handData[8][0] - handData[12][0]) ** 2 + (handData[8][1] - handData[12][1]) ** 2) ** 0.5
+        if (tip_distance / palm_size) < 0.45:
+            return 'TwoFingerHeart'
+        return 'Peace'
+
+    return None
