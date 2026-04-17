@@ -15,6 +15,10 @@ drawState='Standby'
 statusState='Standby'
 color='white'
 brush_size=20
+popup_active=False
+popup_start_time=0
+popup_duration=10
+popup_cooldown_until=0
 
 camera=cv2.VideoCapture(settings['camera_port'],cv2.CAP_DSHOW)
 if not camera.isOpened():
@@ -64,6 +68,152 @@ findhands=MediapipeHands(
 threshold=settings['confidence']
 keypoints=settings['keypoints']
 color_idx=['red','orange','yellow','green','cyan','blue','purple','pink','white','black']
+
+def build_birthday_popup(width, height, elapsed):
+    # Nền pastel gradient ấm áp (hồng nhạt → vàng nhạt)
+    popup = np.zeros((height, width, 3), dtype=np.uint8)
+    for y in range(height):
+        t_val = y / max(1, height - 1)
+        r = int(255 * (1 - t_val) + 255 * t_val)
+        g = int(240 * (1 - t_val) + 253 * t_val)
+        b = int(245 * (1 - t_val) + 231 * t_val)
+        popup[y, :] = (b, g, r)  # BGR
+
+    # ── Hoa rơi nhẹ (chấm tròn pastel) ──────────────────────────────
+    petal_colors = [
+        (193, 168, 249),  # tím nhạt
+        (169, 230, 168),  # xanh mint
+        (245, 211, 246),  # hồng pastel
+        (246, 211, 151),  # vàng nhạt
+        (181, 213, 249),  # xanh dương nhạt
+    ]
+    t_anim = float(elapsed)
+    rng = np.random.RandomState(42)
+    seeds_x = rng.randint(0, max(1, width), 55)
+    seeds_y = rng.randint(0, max(1, height), 55)
+    for i in range(55):
+        x = int((seeds_x[i] + 70 * t_anim * (0.5 + (i % 3) * 0.3)) % max(1, width))
+        y = int((seeds_y[i] + (80 + i % 4 * 25) * t_anim) % max(1, height))
+        r = 3 + (i % 3)
+        color_p = petal_colors[i % len(petal_colors)]
+        cv2.circle(popup, (x, y), r, color_p, -1, lineType=cv2.LINE_AA)
+        cv2.circle(popup, (x, y), r + 1, (255, 255, 255), 1, lineType=cv2.LINE_AA)
+
+    # ── Ngôi sao trang trí 4 góc ─────────────────────────────────────
+    def draw_star(img, cx, cy, size, clr):
+        for angle in range(0, 360, 72):
+            rad = np.radians(angle - 90)
+            x1 = int(cx + size * np.cos(rad))
+            y1 = int(cy + size * np.sin(rad))
+            rad2 = np.radians(angle - 90 + 36)
+            x2 = int(cx + size * 0.38 * np.cos(rad2))
+            y2 = int(cy + size * 0.38 * np.sin(rad2))
+            cv2.line(img, (cx, cy), (x1, y1), clr, 2, lineType=cv2.LINE_AA)
+            cv2.line(img, (cx, cy), (x2, y2), clr, 1, lineType=cv2.LINE_AA)
+
+    star_color = (150, 210, 246)  # vàng pastel (BGR)
+    draw_star(popup, 45, 45, 22, star_color)
+    draw_star(popup, width - 45, 45, 18, (200, 170, 249))
+    draw_star(popup, 55, height - 55, 16, (168, 230, 168))
+    draw_star(popup, width - 50, height - 50, 20, star_color)
+
+    # ── Bánh kem giản dị ─────────────────────────────────────────────
+    cake_w  = int(width * 0.38)
+    cake_h  = int(height * 0.19)
+    cx_cake = width // 2
+    cake_x1 = cx_cake - cake_w // 2
+    cake_y1 = int(height * 0.60)
+    cake_x2 = cake_x1 + cake_w
+    cake_y2 = cake_y1 + cake_h
+
+    # Thân bánh
+    cv2.rectangle(popup, (cake_x1, cake_y1), (cake_x2, cake_y2), (220, 200, 255), -1, lineType=cv2.LINE_AA)
+    # Lớp kem trên
+    cv2.rectangle(popup, (cake_x1, cake_y1), (cake_x2, cake_y1 + 20), (245, 235, 255), -1, lineType=cv2.LINE_AA)
+    # Sọc trang trí
+    cv2.rectangle(popup, (cake_x1, cake_y1 + 28), (cake_x2, cake_y1 + 36), (249, 168, 193), -1, lineType=cv2.LINE_AA)
+    # Chấm trang trí nhỏ trên bánh
+    dot_positions = [0.2, 0.4, 0.6, 0.8]
+    dot_clrs = [(255, 255, 200), (200, 255, 230), (255, 200, 230), (200, 220, 255)]
+    for dp, dc in zip(dot_positions, dot_clrs):
+        dx = int(cake_x1 + cake_w * dp)
+        dy = cake_y1 + cake_h // 2 + 8
+        cv2.circle(popup, (dx, dy), 5, dc, -1, lineType=cv2.LINE_AA)
+
+    # ── Nến + ngọn lửa nhấp nháy ─────────────────────────────────────
+    candle_colors = [(193, 168, 249), (168, 230, 168), (246, 213, 152), (181, 213, 249)]
+    candle_xs = [cake_x1 + cake_w // 5,
+                 cake_x1 + 2 * cake_w // 5,
+                 cake_x1 + 3 * cake_w // 5,
+                 cake_x1 + 4 * cake_w // 5]
+    flame_flicker = int(3 * np.sin(t_anim * 8.0))
+    for ci, (cdx, cc) in enumerate(zip(candle_xs, candle_colors)):
+        cv2.rectangle(popup, (cdx - 5, cake_y1 - 40), (cdx + 5, cake_y1), cc, -1, lineType=cv2.LINE_AA)
+        fy = cake_y1 - 44 + flame_flicker + ci % 2 * 2
+        cv2.ellipse(popup, (cdx, fy), (6, 11), 0, 0, 360, (100, 210, 255), -1, lineType=cv2.LINE_AA)
+        cv2.ellipse(popup, (cdx, fy), (3, 6),  0, 0, 360, (200, 245, 255), -1, lineType=cv2.LINE_AA)
+
+    # ── Tiêu đề chính ─────────────────────────────────────────────────
+    title    = 'CHUC MUNG SINH NHAT!'   # không dấu vì OpenCV không hỗ trợ Unicode
+    subtitle = 'Chuc ban that nhieu suc khoe va hanh phuc'
+    note     = '(Happy Birthday to you!)'
+
+    title_scale    = max(0.9, min(width, height) / 460.0)
+    subtitle_scale = max(0.55, min(width, height) / 820.0)
+    note_scale     = max(0.45, min(width, height) / 1000.0)
+
+    (tw, _), _ = cv2.getTextSize(title, cv2.FONT_HERSHEY_DUPLEX, title_scale, 2)
+    tx = max(10, (width - tw) // 2)
+    ty = int(height * 0.22)
+
+    # Bóng hồng nhẹ
+    cv2.putText(popup, title, (tx + 2, ty + 2),
+                cv2.FONT_HERSHEY_DUPLEX, title_scale, (180, 140, 200), 4, lineType=cv2.LINE_AA)
+    # Chữ trắng sạch
+    cv2.putText(popup, title, (tx, ty),
+                cv2.FONT_HERSHEY_DUPLEX, title_scale, (255, 255, 255), 2, lineType=cv2.LINE_AA)
+
+    # Hàng trái tim ♥ ♥ ♥
+    hearts = '~ v  v  v  v  v ~'
+    (hw, _), _ = cv2.getTextSize(hearts, cv2.FONT_HERSHEY_SIMPLEX, subtitle_scale, 1)
+    cv2.putText(popup, hearts,
+                (max(8, (width - hw) // 2), ty + int(38 * title_scale)),
+                cv2.FONT_HERSHEY_SIMPLEX, subtitle_scale, (193, 140, 210), 1, lineType=cv2.LINE_AA)
+
+    # Subtitle
+    (sw, _), _ = cv2.getTextSize(subtitle, cv2.FONT_HERSHEY_SIMPLEX, subtitle_scale, 2)
+    sx = max(8, (width - sw) // 2)
+    sy = int(height * 0.38)
+    cv2.putText(popup, subtitle, (sx + 1, sy + 1),
+                cv2.FONT_HERSHEY_SIMPLEX, subtitle_scale, (100, 80, 120), 2, lineType=cv2.LINE_AA)
+    cv2.putText(popup, subtitle, (sx, sy),
+                cv2.FONT_HERSHEY_SIMPLEX, subtitle_scale, (255, 255, 255), 1, lineType=cv2.LINE_AA)
+
+    # Note nhỏ (tiếng Anh phụ đề)
+    (nw, _), _ = cv2.getTextSize(note, cv2.FONT_HERSHEY_SIMPLEX, note_scale, 1)
+    cv2.putText(popup, note,
+                (max(8, (width - nw) // 2), sy + int(28 * subtitle_scale)),
+                cv2.FONT_HERSHEY_SIMPLEX, note_scale, (170, 150, 190), 1, lineType=cv2.LINE_AA)
+
+    # ── Footer đếm ngược ──────────────────────────────────────────────
+    remain = max(0, int(np.ceil(popup_duration - elapsed)))
+    footer = f'Tu dong dong sau {remain}s  |  Nhan phim bat ky de dong'
+    cv2.putText(popup, footer,
+                (20, height - 16),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160, 130, 170), 1, lineType=cv2.LINE_AA)
+
+    return popup
+
+def trigger_birthday_popup():
+    global popup_active, popup_start_time, popup_cooldown_until
+    now = time.time()
+    if now < popup_cooldown_until:
+        return
+    popup_active = True
+    popup_start_time = now
+    popup_cooldown_until = now + popup_duration + 2
+    cv2.namedWindow('Birthday Surprise', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('Birthday Surprise', 900, 520)
 
 def resize_with_letterbox(frame, target_w, target_h):
     """Resize preserving aspect ratio and pad to target size (no cropping)."""
@@ -265,6 +415,8 @@ while run:
                 statusState=drawState
             else:
                 statusState=customGesture
+                if str(customGesture).lower()=='middlefinger':
+                    trigger_birthday_popup()
 
             frame=findhands.drawLandmarks(frame, [handlandmarks[idx]],False)
             break
@@ -316,6 +468,16 @@ while run:
                 cv2.circle(canvas,(handlandmarks[idx][8][0],handlandmarks[idx][8][1]),brush_size,settings['color_swatches'][color],-1)
     frame=cv2.addWeighted(frame,.6,canvas,1,1)
     frame=preprocess(frame, statusState,fps)
+
+    if popup_active:
+        elapsed = time.time() - popup_start_time
+        if elapsed <= popup_duration:
+            popup_frame = build_birthday_popup(settings['window_width'], settings['window_height'], elapsed)
+            cv2.imshow('Birthday Surprise', popup_frame)
+        else:
+            popup_active = False
+            cv2.destroyWindow('Birthday Surprise')
+
     prevcanvas=canvas
     if time.time()-savetime<=1:
         cv2.putText(frame,f'Image saved succesfully',(settings['window_width']//2-380,settings['window_height']//2),cv2.FONT_HERSHEY_SIMPLEX,2,(10,250,10),2)
